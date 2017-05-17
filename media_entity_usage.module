@@ -1,0 +1,153 @@
+<?php
+
+use Drupal\media_entity\Entity\Media;
+
+/**
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ */
+function media_entity_usage_entity_insert(Drupal\Core\Entity\EntityInterface $entity) {
+  // Check for entity type group (The content group is nodes, terms, users and media etc.)
+  if($entity->getEntityType()->get('group') == 'content') {
+    $media_fields = _media_entity_usage_get_media_ref_fields($entity->getEntityTypeId(), $entity->bundle());
+    // Look for media fields on entity.
+    foreach ($media_fields as $key => $field_name) {
+      // Look for media fields that have content.
+      if(!empty($entity->get($field_name)->getValue())) {
+        // Go through each new media reference.
+        foreach ($entity->get($field_name)->getValue() as $target_id) {
+          $new_media_ref = Media::load($target_id['target_id']);
+          _media_entity_usage_add_ref($new_media_ref, $entity->getEntityTypeId(), $entity->id());
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ */
+function media_entity_usage_entity_update(Drupal\Core\Entity\EntityInterface $entity) {
+  // Check for entity type group (The content group is nodes, terms, users and media etc.)
+  if($entity->getEntityType()->get('group') == 'content') {
+    $media_fields = _media_entity_usage_get_media_ref_fields($entity->getEntityTypeId(), $entity->bundle());
+
+    foreach ($media_fields as $key => $field_name) {
+      // If media field has changed.
+      if ($entity->get($field_name)->getValue() != $entity->original->get($field_name)->getValue()) {
+        // Go through each old media reference.
+        foreach ($entity->original->get($field_name)->getValue() as $target_id) {
+          // Delete entity reference from the media entity.
+          $old_media_ref = Media::load($target_id['target_id']);
+          if (isset($old_media_ref)) {
+            _media_entity_usage_delete_ref($old_media_ref, $entity->getEntityTypeId(), $entity->id());
+          }
+        }
+
+        // Go through each new media reference.
+        foreach ($entity->get($field_name)->getValue() as $target_id) {
+          // Add entity reference to the media entity.
+          $new_media_ref = Media::load($target_id['target_id']);
+          if (isset($new_media_ref)) {
+            _media_entity_usage_add_ref($new_media_ref, $entity->getEntityTypeId(), $entity->id());
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Returns an array of fields referencing a media entity.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @return array
+ */
+function _media_entity_usage_get_media_ref_fields($entity_type, $bundle) {
+  $fields = \Drupal::entityManager()->getFieldDefinitions($entity_type, $bundle);
+  $media_fields = array();
+  foreach ($fields as $key => $value) {
+    if ($value->getType() == 'entity_reference') {
+      if ($value->getItemDefinition()->getSettings()['target_type'] == 'media') {
+        $media_fields[] = $key;
+      }
+    }
+  }
+
+  return $media_fields;
+}
+
+/**
+ * Deletes an entity reference from a media reference field.
+ *
+ * @param $media_entity
+ * @param $ref_entity_type
+ * @param $ref_entity_id
+ */
+function _media_entity_usage_delete_ref($media_entity, $ref_entity_type, $ref_entity_id) {
+  // Get all fields for media entity.
+  $fields = $media_entity->getFieldDefinitions();
+
+  // Look for field_media_usage field type.
+  foreach($fields as $field_name => $field_attributes) {
+    if ($field_attributes->getType() == 'field_media_usage') {
+
+      // Make sure the entity has the field.
+      if ($media_entity->hasField($field_name)) {
+        $media_usage = $media_entity->get($field_name)->getValue();
+
+        // Look for our referenced entity.
+        foreach ($media_usage as $key => $usages) {
+          if ($usages['entity_type'] == $ref_entity_type && $usages['entity_id'] == $ref_entity_id) {
+
+            // Remove entity reference on media entity.
+            unset($media_usage[$key]);
+            $media_entity->set($field_name, $media_usage);
+            $media_entity->save();
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Adds an entity reference to a media reference field.
+ *
+ * @param $media_entity
+ * @param $ref_entity_type
+ * @param $ref_entity_id
+ */
+function _media_entity_usage_add_ref($media_entity, $ref_entity_type, $ref_entity_id) {
+  // Get all fields for media entity.
+  $fields = $media_entity->getFieldDefinitions();
+  $media_entity_exists = FALSE;
+
+  // Look for field_media_usage field type.
+  foreach($fields as $field_name => $field_attributes) {
+    if ($field_attributes->getType() == 'field_media_usage') {
+
+      // Make sure the entity has the field.
+      if ($media_entity->hasField($field_name)) {
+        $media_usage = $media_entity->get($field_name)->getValue();
+
+        // Make sure our referenced entity is not already referenced.
+        foreach ($media_usage as $key => $usages) {
+          if ($usages['entity_type'] == $ref_entity_type && $usages['entity_id'] == $ref_entity_id) {
+            $media_entity_exists = TRUE;
+          }
+        }
+
+        // Set entity reference on media entity.
+        if ($media_entity_exists == FALSE) {
+          $media_usage[] = array(
+            'entity_type' => $ref_entity_type,
+            'entity_id' => $ref_entity_id,
+          );
+          $media_entity->set($field_name, $media_usage);
+          $media_entity->save();
+        }
+      }
+    }
+  }
+}

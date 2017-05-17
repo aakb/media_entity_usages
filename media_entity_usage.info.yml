@@ -1,0 +1,8 @@
+name: Media entity usage
+description: 'Field type and functionality to handle and track where image entities ae used.'
+type: module
+package: Field types
+core: 8.x
+version: 1.0
+dependencies:
+  - field

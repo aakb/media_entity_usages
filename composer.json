@@ -1,0 +1,14 @@
+{
+  "name": "drupal/media_entity_usage",
+  "type": "drupal-module",
+  "description": "Provides a field for tracking where media is used",
+  "keywords": ["Drupal"],
+  "license": "GPL-2.0+",
+  "minimum-stability": "dev",
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://packages.drupal.org/8"
+    }
+  ]
+}
